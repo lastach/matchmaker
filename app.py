@@ -1062,6 +1062,26 @@ PROFILES = [
      'style_tags': ['Soft / cozy / nurturing', 'Polished / professional'],
      'timeline_kids': 'Someday (3-7 years)',
      'wants_kids': 'Yes'}
+    {
+    "name": "Laurie",
+    "age": 41,
+    "gender": "woman",
+    "location": "Boston, MA",
+    "description": (
+        "Entrepreneur and adventurer who values intellectual depth, autonomy, and shared ambition. "
+        "Loves travel, motorcycles, dance, problem-solving, and building new things. "
+        "Seeks a grounded but driven partner who brings emotional steadiness, exploration, and fun."
+    ),
+    "wants_kids": "yes",             # <- updated
+    "timeline_kids": "soon",         # <- updated
+    "relationship_goal": "long_term",
+    "adventure_level": 5,
+    "stability_level": 3,
+    "ambition_level": 5,
+    "emotional_availability": 3,
+    "communication_style": "direct",
+    "style_tags": ["polished", "sporty", "outdoorsy", "adventurous"],
+}
 ]
 
 # -------------------------
@@ -1387,6 +1407,17 @@ PROFILE_PREFERENCES = {
         "min_age": 36,
         "max_age": 50,
     },
+    "Laurie": {
+    "preferred_genders": ["man"],
+    "preferred_styles": [
+        "active_outdoorsy",
+        "refined_casual",
+        "clean_cut",
+        "adventurous"
+    ],
+    "min_age": 35,
+    "max_age": 52,
+}
 }
 
 # -------------------------
