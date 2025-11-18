@@ -1605,21 +1605,20 @@ def coaching_blurb(user, profile, comp_score, breakdown):
 def admin_panel():
     tab1, tab2 = st.tabs(["Profile Matches Table", "Swipe Photo Admin"])
 
-    # ---- Tab 1: summary table of mutually top-3 matches between fictional profiles ----
+    # ---------- TAB 1: Mutual top-3 matches table ----------
     with tab1:
         st.subheader("Mutual Matches Between Fictional Profiles")
 
         names = [p["name"] for p in PROFILES]
         profile_by_name = {p["name"]: p for p in PROFILES}
 
-        # First: compute all "good mutual" matches + scores for each person
+        # Step 1: compute all "good mutual" matches for each profile
         raw_scores = {name: {} for name in names}
 
         for base_profile in PROFILES:
             base_name = base_profile["name"]
             prefs = PROFILE_PREFERENCES.get(base_name, {})
 
-            # pseudo-user built from profile + their prefs
             user = {
                 "age": base_profile["age"],
                 "city": base_profile["location"],
@@ -1652,7 +1651,7 @@ def admin_panel():
 
                 raw_scores[base_name][other_name] = res["final_score"]
 
-        # Second: keep only each person's top 3 matches (by score)
+        # Step 2: keep each person's top 3 matches by score
         top3 = {}
         for name, partners in raw_scores.items():
             sorted_partners = sorted(
@@ -1660,51 +1659,69 @@ def admin_panel():
             )
             top3[name] = sorted_partners[:3]
 
-        # Third: enforce that a match only counts if each person is in the other's top 3
-        mutual_top_pairs = set()
+        # Step 3: require that each person is in the other's top 3
+        mutual_pairs = set()
         for a, partners in top3.items():
             partners_dict = dict(partners)
-            for b in partners_dict.keys():
+            for b in partners_dict:
                 other_top = dict(top3.get(b, []))
                 if a in other_top:
-                    mutual_top_pairs.add((a, b))
+                    mutual_pairs.add((a, b))
 
-        # Build rows for the admin table
+        # Step 4: build rows for admin table
         rows = []
         for name in names:
-            base_profile = profile_by_name[name]
-            # short reminder of who this is (first sentence / ~80 chars)
-            short_desc = base_profile["description"].split(".")[0][:80]
+            base = profile_by_name[name]
+            # short reminder (single line)
+            short_summary = base["description"].split(".")[0][:80]
 
-            matches_for_person = []
-            scores_for_person = []
-            partners_dict = dict(top3[name])
-
-            for match_name, score in partners_dict.items():
-                if (name, match_name) in mutual_top_pairs:
-                    matches_for_person.append(match_name)
-                    scores_for_person.append(f"{score:.1f}")
+            matches = []
+            scores = []
+            for match_name, score in top3[name]:
+                if (name, match_name) in mutual_pairs:
+                    matches.append(match_name)
+                    scores.append(f"{score:.1f}")
 
             rows.append(
                 {
                     "Person": name,
-                    "Summary": short_desc,
-                    "Matches": ", ".join(matches_for_person),
-                    "Scores": ", ".join(scores_for_person),
+                    "Summary": short_summary,
+                    "Matches": ", ".join(matches),
+                    "Scores": ", ".join(scores),
                 }
             )
 
         df = pd.DataFrame(rows)
-        st.dataframe(df, hide_index=True, use_container_width=True)
 
-    # ---- Tab 2: swipe photo admin (unchanged) ----
+        # Step 5: render as a markdown table (no internal scrollbars)
+        headers = df.columns.tolist()
+        md_lines = []
+
+        # header row
+        md_lines.append("| " + " | ".join(headers) + " |")
+        md_lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
+
+        # data rows
+        for row in df.itertuples(index=False):
+            cells = [str(x) if x is not None else "" for x in row]
+            md_lines.append("| " + " | ".join(cells) + " |")
+
+        table_md = "\n".join(md_lines)
+        st.markdown(table_md)
+
+    # ---------- TAB 2: Swipe photo admin (unchanged) ----------
     with tab2:
         st.subheader("Swipe Photo Management")
-        st.markdown("Upload generic photos for the like / not-for-me exercise (not the headshots above).")
+        st.markdown(
+            "Upload generic photos for the like / not-for-me exercise "
+            "(not the headshots above)."
+        )
 
         photos = load_photos()
         uploaded_files = st.file_uploader(
-            "Upload one or more photos", type=["png", "jpg", "jpeg"], accept_multiple_files=True
+            "Upload one or more photos",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True,
         )
 
         if uploaded_files and st.button("Save uploaded photos"):
@@ -1725,7 +1742,9 @@ def admin_panel():
         st.markdown("#### Existing swipe photos")
         if photos:
             for p in photos:
-                st.image(p["path"], width=150, caption=f"ID {p['id']}: {p['filename']}")
+                st.image(
+                    p["path"], width=150, caption=f"ID {p['id']}: {p['filename']}"
+                )
         else:
             st.info("No swipe photos uploaded yet.")
 
