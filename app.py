@@ -1075,8 +1075,7 @@ PROFILES = [
     'ambition_level': 5,
     'emotional_availability': 3,
     'communication_style': "direct",
-    'style_tags': ['Outdoorsy / athletic',  'Polished / professional'],
-}
+    'style_tags': ['Outdoorsy / athletic',  'Polished / professional'],}
 ]
 
 # -------------------------
