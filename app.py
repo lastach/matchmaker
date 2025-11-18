@@ -23,7 +23,6 @@ STYLE_OPTIONS = [
     "Minimalist / creative",
 ]
 
-
 # -------------------------
 # Helper functions for swipe photos
 # -------------------------
@@ -47,10 +46,9 @@ def log_photo_rating(session_id, photo_id, rating):
             writer.writerow(["session_id", "photo_id", "rating"])
         writer.writerow([session_id, photo_id, rating])
 
-
 # -------------------------
 # Fictional profiles + photos
-#   Update `photo_path` to match your actual filenames.
+#   Make sure photo_path filenames match actual files in profile_photos/
 # -------------------------
 PROFILES = [
     {
@@ -248,59 +246,51 @@ PROFILES = [
 ]
 
 # -------------------------
-# Assumed preferences from their (imagined) swipe data
+# Assumed attraction preferences (imagined swipe data)
 # -------------------------
 PROFILE_PREFERENCES = {
-    # likes slightly younger women, outdoorsy / polished
     "Chris": {
         "preferred_genders": ["Woman"],
         "preferred_styles": ["Outdoorsy / athletic", "Polished / professional"],
         "min_age": 32,
         "max_age": 45,
     },
-    # Taylor likes warm, stable men a bit 40–52
     "Taylor": {
         "preferred_genders": ["Man"],
         "preferred_styles": ["Soft / cozy / nurturing", "Polished / professional"],
         "min_age": 40,
         "max_age": 52,
     },
-    # Riley is pretty queer / open
     "Riley": {
         "preferred_genders": ["Woman", "Man", "Non-binary"],
         "preferred_styles": ["Alternative / tattoos / edgy", "Minimalist / creative"],
         "min_age": 30,
         "max_age": 45,
     },
-    # Sam: straight, outdoorsy, laid-back
     "Sam": {
         "preferred_genders": ["Woman"],
         "preferred_styles": ["Outdoorsy / athletic", "Minimalist / creative"],
         "min_age": 30,
         "max_age": 42,
     },
-    # Jordan: emotionally attuned, likes kind, grounded partners
     "Jordan": {
         "preferred_genders": ["Man"],
         "preferred_styles": ["Soft / cozy / nurturing", "Polished / professional"],
         "min_age": 38,
         "max_age": 50,
     },
-    # Alex: ambitious, likes similarly driven / polished
     "Alex": {
         "preferred_genders": ["Woman"],
         "preferred_styles": ["Polished / professional", "Minimalist / creative"],
         "min_age": 32,
         "max_age": 42,
     },
-    # Morgan: likes balanced, thoughtful men ~mid 30s–mid 40s
     "Morgan": {
         "preferred_genders": ["Man"],
         "preferred_styles": ["Polished / professional", "Soft / cozy / nurturing"],
         "min_age": 35,
         "max_age": 45,
     },
-    # Jamie: attracted to warm, grounded partners; fairly flexible
     "Jamie": {
         "preferred_genders": ["Woman"],
         "preferred_styles": ["Soft / cozy / nurturing", "Polished / professional"],
@@ -309,13 +299,18 @@ PROFILE_PREFERENCES = {
     },
 }
 
-
 # -------------------------
 # Matching logic
 # -------------------------
 def passes_dealbreakers(user, profile):
+    """User (dict) vs profile (dict) hard filters, including orientation."""
+    # orientation
+    interested = set(user.get("interested_in_genders", []))
+    if interested and profile["gender"] not in interested:
+        return False
+
     # geography – simple: city name match unless open to long-distance
-    if not user["open_to_long_distance"]:
+    if not user.get("open_to_long_distance", False):
         user_city = user["city"].split(",")[0].strip().lower()
         profile_city = profile["location"].split(",")[0].strip().lower()
         if user_city != profile_city:
@@ -326,7 +321,7 @@ def passes_dealbreakers(user, profile):
         return False
 
     # kids strictness
-    if user["kids_strict"]:
+    if user.get("kids_strict", False):
         if user["wants_kids"] != profile["wants_kids"]:
             return False
 
@@ -405,27 +400,22 @@ def user_attraction_to_profile(user, profile):
 
 
 def profile_attraction_to_user(profile, user):
-    """How much they might be attracted to you, given imagined swipe data."""
+    """How much they might be attracted to you, based on imagined prefs."""
     prefs = PROFILE_PREFERENCES.get(profile["name"])
     if not prefs:
-        return 0.5  # default neutral
+        return 0.5
 
-    # gender
-    if user["gender"] != "Prefer not to say" and prefs["preferred_genders"]:
-        if user["gender"] not in prefs["preferred_genders"]:
-            gender_factor = 0.2
-        else:
-            gender_factor = 1.0
-    else:
-        gender_factor = 0.6
+    # hard orientation block
+    if user["gender"] not in prefs["preferred_genders"]:
+        return 0.0
 
-    # age
+    # age factor
     if prefs["min_age"] <= user["age"] <= prefs["max_age"]:
         age_factor = 1.0
     else:
         age_factor = 0.5
 
-    # visual style
+    # style factor
     your_style = set(user.get("self_style_tags", []))
     if not your_style:
         style_score = 0.5
@@ -438,7 +428,9 @@ def profile_attraction_to_user(profile, user):
         else:
             style_score = 0.9
 
-    return max(0.0, min(1.0, style_score * 0.6 + age_factor * 0.25 + gender_factor * 0.15))
+    # combine
+    score = style_score * 0.7 + age_factor * 0.3
+    return max(0.0, min(1.0, score))
 
 
 def coaching_blurb(user, profile, comp_score, breakdown):
@@ -482,41 +474,117 @@ def coaching_blurb(user, profile, comp_score, breakdown):
 
     return headline, themes
 
-
 # -------------------------
-# Admin panel – swipe photos
+# Admin panel – photos + profile-to-profile matches
 # -------------------------
 def admin_panel():
-    st.title("Admin Panel – Swipe Photo Management")
-    st.markdown("Upload photos for the attraction 'like / not for me' exercise (not profile pics).")
+    tab1, tab2 = st.tabs(["Swipe Photo Admin", "Profile Match Explorer"])
 
-    photos = load_photos()
-    uploaded_files = st.file_uploader(
-        "Upload one or more photos", type=["png", "jpg", "jpeg"], accept_multiple_files=True
-    )
+    # ---- Tab 1: swipe photo management ----
+    with tab1:
+        st.subheader("Swipe Photo Management")
+        st.markdown("Upload generic photos for the like / not-for-me exercise (not the profile headshots).")
 
-    if uploaded_files and st.button("Save uploaded photos"):
-        for file in uploaded_files:
-            filepath = os.path.join(PHOTO_DIR, file.name)
-            with open(filepath, "wb") as f:
-                f.write(file.getbuffer())
-            photos.append(
-                {
-                    "id": len(photos) + 1,
-                    "path": filepath,
-                    "filename": file.name,
-                }
-            )
-        save_photos(photos)
-        st.success("Photos saved to backend.")
+        photos = load_photos()
+        uploaded_files = st.file_uploader(
+            "Upload one or more photos", type=["png", "jpg", "jpeg"], accept_multiple_files=True
+        )
 
-    st.subheader("Existing photos")
-    if photos:
-        for p in photos:
-            st.image(p["path"], width=150, caption=f"ID {p['id']}: {p['filename']}")
-    else:
-        st.info("No photos uploaded yet.")
+        if uploaded_files and st.button("Save uploaded photos"):
+            for file in uploaded_files:
+                filepath = os.path.join(PHOTO_DIR, file.name)
+                with open(filepath, "wb") as f:
+                    f.write(file.getbuffer())
+                photos.append(
+                    {
+                        "id": len(photos) + 1,
+                        "path": filepath,
+                        "filename": file.name,
+                    }
+                )
+            save_photos(photos)
+            st.success("Photos saved to backend.")
 
+        st.markdown("#### Existing photos")
+        if photos:
+            for p in photos:
+                st.image(p["path"], width=150, caption=f"ID {p['id']}: {p['filename']}")
+        else:
+            st.info("No swipe photos uploaded yet.")
+
+    # ---- Tab 2: profile-to-profile matches ----
+    with tab2:
+        st.subheader("Profile Match Explorer")
+        st.markdown(
+            "Pick one fictional person and see how they match with the others, using their own "
+            "relationship data plus their imagined attraction preferences."
+        )
+
+        profile_names = [p["name"] for p in PROFILES]
+        base_name = st.selectbox("View matches for:", profile_names)
+
+        base_profile = next(p for p in PROFILES if p["name"] == base_name)
+        prefs = PROFILE_PREFERENCES.get(base_name, {})
+
+        # Build a pseudo-user from this profile + their prefs
+        user = {
+            "age": base_profile["age"],
+            "city": base_profile["location"],
+            "gender": base_profile["gender"],
+            "min_age": prefs.get("min_age", 25),
+            "max_age": prefs.get("max_age", 60),
+            "open_to_long_distance": True,
+            "wants_kids": base_profile["wants_kids"],
+            "kids_strict": True,
+            "timeline_kids": base_profile["timeline_kids"],
+            "relationship_goal": base_profile["relationship_goal"],
+            "adventure_level": base_profile["adventure_level"],
+            "stability_level": base_profile["stability_level"],
+            "ambition_level": base_profile["ambition_level"],
+            "emotional_availability": base_profile["emotional_availability"],
+            "communication_style": base_profile["communication_style"],
+            "preferred_styles": prefs.get("preferred_styles", []),
+            "self_style_tags": base_profile.get("style_tags", []),
+            "interested_in_genders": prefs.get("preferred_genders", []),
+        }
+
+        if st.button("Compute matches for this profile"):
+            rows = []
+            for other in PROFILES:
+                if other["name"] == base_name:
+                    continue
+
+                if not passes_dealbreakers(user, other):
+                    continue
+
+                comp_score, breakdown = score_profile(user, other)
+                base_likes_other = user_attraction_to_profile(user, other)
+                other_likes_base = profile_attraction_to_user(other, user)
+
+                final_score = (
+                    0.5 * (comp_score / 100.0)
+                    + 0.25 * base_likes_other
+                    + 0.25 * other_likes_base
+                ) * 100.0
+
+                rows.append(
+                    {
+                        "name": other["name"],
+                        "age": other["age"],
+                        "gender": other["gender"],
+                        "location": other["location"],
+                        "compatibility": round(comp_score, 1),
+                        f"{base_name}→them_attraction": int(base_likes_other * 100),
+                        f"them→{base_name}_attraction": int(other_likes_base * 100),
+                        "final_score": round(final_score, 1),
+                    }
+                )
+
+            if not rows:
+                st.warning("No matches found within dealbreakers for this profile.")
+            else:
+                rows = sorted(rows, key=lambda r: r["final_score"], reverse=True)
+                st.dataframe(rows)
 
 # -------------------------
 # User app
@@ -531,9 +599,9 @@ def user_app():
 
     st.markdown(
         "This prototype:\n"
-        "- Applies **dealbreakers** first (geography, age range, kids).\n"
-        "- Scores **compatibility** on relationship goals & lifestyle.\n"
-        "- Models **your attraction to them** and **their attraction to you** using simple style + age rules.\n"
+        "- Applies **dealbreakers** (orientation, geography, age, kids).\n"
+        "- Scores **compatibility** on goals and lifestyle.\n"
+        "- Models **your attraction to them** and **their attraction to you** from simple rules.\n"
         "- Optionally collects extra attraction data via a swipe-style photo exercise."
     )
 
@@ -545,9 +613,18 @@ def user_app():
         city = st.text_input("Your city (e.g., 'Boston, MA')", value="Boston, MA")
         min_age = st.number_input("Minimum age you’d date", min_value=20, max_value=80, value=35)
     with col2:
-        gender = st.selectbox("Your gender", ["Woman", "Man", "Non-binary", "Other", "Prefer not to say"])
+        gender = st.selectbox(
+            "Your gender",
+            ["Woman", "Man", "Non-binary", "Other", "Prefer not to say"],
+        )
         open_to_long_distance = st.checkbox("Open to long-distance?", value=False)
         max_age = st.number_input("Maximum age you’d date", min_value=20, max_value=90, value=48)
+
+    interested_in_genders = st.multiselect(
+        "Who are you romantically/sexually interested in?",
+        ["Woman", "Man", "Non-binary"],
+        default=["Man"],
+    )
 
     st.subheader("Kids & relationship goals")
     wants_kids = st.selectbox("Do you want kids (ever)?", ["Yes", "No", "Maybe / unsure"])
@@ -620,6 +697,7 @@ def user_app():
         "communication_style": communication_style,
         "preferred_styles": preferred_styles,
         "self_style_tags": self_style_tags,
+        "interested_in_genders": interested_in_genders,
     }
 
     if st.button("Find my top matches"):
@@ -633,13 +711,14 @@ def user_app():
             results = []
             for p in viable:
                 comp_score, breakdown = score_profile(user, p)
-                you_like_them = user_attraction_to_profile(user, p)         # 0–1
-                they_like_you = profile_attraction_to_user(p, user)         # 0–1
+                you_like_them = user_attraction_to_profile(user, p)   # 0–1
+                they_like_you = profile_attraction_to_user(p, user)   # 0–1
 
-                # combine: 50% compatibility, 25% your attraction, 25% their attraction
-                final_score = (0.5 * (comp_score / 100.0)
-                               + 0.25 * you_like_them
-                               + 0.25 * they_like_you) * 100.0
+                final_score = (
+                    0.5 * (comp_score / 100.0)
+                    + 0.25 * you_like_them
+                    + 0.25 * they_like_you
+                ) * 100.0
 
                 results.append(
                     {
@@ -683,10 +762,10 @@ def user_app():
 
         st.header("3. Meta: what this prototype is doing")
         st.markdown(
-            "- Hard filters (dealbreakers) first.\n"
+            "- Hard filters (orientation, geography, age, kids) first.\n"
             "- Compatibility based on kids, goals, lifestyle, communication.\n"
             "- Your attraction estimated from **your stated tastes vs their style tags**.\n"
-            "- Their attraction estimated from **imagined swipe data** (preferences) vs your **self-described style, age, and gender**.\n"
+            "- Their attraction estimated from **their imagined swipe prefs** vs your **gender, age, and style**.\n"
             "- Final score blends all three."
         )
 
@@ -722,7 +801,6 @@ def user_app():
         st.session_state["photo_index"] += 1
         st.experimental_rerun()
 
-
 # -------------------------
 # Entry point
 # -------------------------
@@ -732,4 +810,3 @@ if mode == "Admin":
     admin_panel()
 else:
     user_app()
-
