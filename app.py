@@ -103,8 +103,7 @@ PROFILES = [
         "style_tags": ["Soft / cozy / nurturing"],
         "photo_path": "profile_photos/Taylor.jpg",
         "description": (
-            "Teacher who craves security and a warm home life. Loves routine, "
-            "friends, and family dinners. Big heart, lower appetite for risk."
+            "Teacher who craves security and a warm home life. Big heart, low appetite for risk."
         ),
     },
     {
@@ -121,14 +120,13 @@ PROFILES = [
         "emotional_availability": 4,
         "communication_style": "Playful & emotionally aware",
         "conflict_style": "Collaborative and curious",
-        "attachment_style": "Secure with slight anxious tendencies",
+        "attachment_style": "Secure",
         "schedule_flexibility": 3,
         "social_energy": 5,
         "style_tags": ["Alternative / tattoos / edgy", "Minimalist / creative"],
         "photo_path": "profile_photos/Riley.jpg",
         "description": (
-            "Product manager at a climate tech startup. Loves festivals, dance, "
-            "outdoors, and designing a non-traditional life."
+            "Climate-tech PM who loves festivals, dance, and non-traditional life design."
         ),
     },
     {
@@ -151,8 +149,7 @@ PROFILES = [
         "style_tags": ["Outdoorsy / athletic"],
         "photo_path": "profile_photos/Sam.jpg",
         "description": (
-            "Freelance designer with a flexible lifestyle. Loves road trips, live music, "
-            "and trying hobbies, but avoids heavy emotional talks."
+            "Freelance designer who loves road trips, live music, and low-responsibility fun."
         ),
     },
     {
@@ -175,8 +172,7 @@ PROFILES = [
         "style_tags": ["Soft / cozy / nurturing", "Polished / professional"],
         "photo_path": "profile_photos/Jordan.jpg",
         "description": (
-            "Consultant turned leadership coach. Loves deep conversation, quiet nights in, "
-            "and the occasional big trip. Very emotionally attuned."
+            "Leadership coach who loves deep conversation and quiet nights in."
         ),
     },
     {
@@ -199,8 +195,7 @@ PROFILES = [
         "style_tags": ["Outdoorsy / athletic", "Polished / professional"],
         "photo_path": "profile_photos/Alex.jpg",
         "description": (
-            "Startup exec who loves travel, skiing, and trying new restaurants. "
-            "Wants a true partner to build a big life with but works a lot."
+            "Startup exec who wants a partner to build a big life with."
         ),
     },
     {
@@ -223,8 +218,7 @@ PROFILES = [
         "style_tags": ["Polished / professional", "Minimalist / creative"],
         "photo_path": "profile_photos/Morgan.jpg",
         "description": (
-            "In-house counsel who loves travel, fitness, and thoughtful conversation. "
-            "Values fairness, reliability, and mutual respect."
+            "Attorney who values fairness, reliability, and thoughtful connection."
         ),
     },
     {
@@ -247,8 +241,7 @@ PROFILES = [
         "style_tags": ["Soft / cozy / nurturing", "Polished / professional"],
         "photo_path": "profile_photos/Jamie.jpg",
         "description": (
-            "Healthcare ops leader. Loves weekend trips, cooking at home, and game nights. "
-            "Dependable, thoughtful, and future-oriented."
+            "Healthcare ops leader who loves cooking, weekend trips, and family-oriented life."
         ),
     },
 ]
