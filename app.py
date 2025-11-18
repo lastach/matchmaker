@@ -1402,7 +1402,7 @@ PROFILE_PREFERENCES = {
         "max_age": 50,
     },
     "Laurie": {
-    "preferred_genders": ["man"],
+    "preferred_genders": ["Man"],
     "preferred_styles": ["Polished / professional", "Outdoorsy / athletic"],
     "min_age": 33,
     "max_age": 49,
