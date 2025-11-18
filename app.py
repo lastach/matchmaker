@@ -9,7 +9,7 @@ from uuid import uuid4
 # -------------------------
 st.set_page_config(page_title="AI Matchmaker Prototype", layout="centered")
 
-PHOTO_DB_PATH = "photo_db.json"    # for generic swipe photos (not the profile pics)
+PHOTO_DB_PATH = "photo_db.json"    # generic swipe photos (not profile headshots)
 PHOTO_DIR = "photos"
 RATINGS_PATH = "photo_ratings.csv"
 
@@ -23,8 +23,14 @@ STYLE_OPTIONS = [
     "Minimalist / creative",
 ]
 
+# Thresholds for "good" / mutual matches
+GOOD_COMP_THRESHOLD = 60.0       # compatibility (0–100)
+GOOD_ATTR_THRESHOLD = 0.60       # attraction (0–1), each direction
+GOOD_FINAL_THRESHOLD = 65.0      # overall final score (0–100)
+
+
 # -------------------------
-# Helper functions for swipe photos
+# Swipe-photo helper functions
 # -------------------------
 def load_photos():
     if not os.path.exists(PHOTO_DB_PATH):
@@ -46,9 +52,11 @@ def log_photo_rating(session_id, photo_id, rating):
             writer.writerow(["session_id", "photo_id", "rating"])
         writer.writerow([session_id, photo_id, rating])
 
+
 # -------------------------
 # Fictional profiles + photos
-#   Make sure photo_path filenames match actual files in profile_photos/
+# Make sure files exist at these paths (name-capitalized-only:
+#   profile_photos/Chris.jpg, Taylor.jpg, Riley.jpg, Sam.jpg, Jordan.jpg, Alex.jpg, Morgan.jpg, Jamie.jpg)
 # -------------------------
 PROFILES = [
     {
@@ -297,10 +305,11 @@ PROFILE_PREFERENCES = {
         "min_age": 34,
         "max_age": 45,
     },
-}
+]
+
 
 # -------------------------
-# Matching logic
+# Matching helpers
 # -------------------------
 def passes_dealbreakers(user, profile):
     """User (dict) vs profile (dict) hard filters, including orientation."""
@@ -387,7 +396,7 @@ def score_profile(user, profile):
 
 
 def user_attraction_to_profile(user, profile):
-    """How much you're likely attracted to them, based on style tags."""
+    """How much you're likely attracted to them, based on style tags (0–1)."""
     preferred = set(user.get("preferred_styles", []))
     if not preferred:
         return 0.5
@@ -400,7 +409,7 @@ def user_attraction_to_profile(user, profile):
 
 
 def profile_attraction_to_user(profile, user):
-    """How much they might be attracted to you, based on imagined prefs."""
+    """How much they might be attracted to you, based on imagined prefs (0–1)."""
     prefs = PROFILE_PREFERENCES.get(profile["name"])
     if not prefs:
         return 0.5
@@ -428,9 +437,43 @@ def profile_attraction_to_user(profile, user):
         else:
             style_score = 0.9
 
-    # combine
     score = style_score * 0.7 + age_factor * 0.3
     return max(0.0, min(1.0, score))
+
+
+def compute_match(user, profile):
+    """
+    Compute compatibility + mutual attraction for a user dict vs a profile dict.
+    Returns dict with scores and a boolean 'is_good_mutual'.
+    """
+    if not passes_dealbreakers(user, profile):
+        return None  # fails hard filters from user->profile side
+
+    comp_score, breakdown = score_profile(user, profile)
+    you_like_them = user_attraction_to_profile(user, profile)      # 0–1
+    they_like_you = profile_attraction_to_user(profile, user)      # 0–1
+
+    final_score = (
+        0.5 * (comp_score / 100.0)
+        + 0.25 * you_like_them
+        + 0.25 * they_like_you
+    ) * 100.0
+
+    is_good = (
+        comp_score >= GOOD_COMP_THRESHOLD
+        and you_like_them >= GOOD_ATTR_THRESHOLD
+        and they_like_you >= GOOD_ATTR_THRESHOLD
+        and final_score >= GOOD_FINAL_THRESHOLD
+    )
+
+    return {
+        "comp_score": comp_score,
+        "breakdown": breakdown,
+        "you_like_them": you_like_them,
+        "they_like_you": they_like_you,
+        "final_score": round(final_score, 1),
+        "is_good_mutual": is_good,
+    }
 
 
 def coaching_blurb(user, profile, comp_score, breakdown):
@@ -474,16 +517,71 @@ def coaching_blurb(user, profile, comp_score, breakdown):
 
     return headline, themes
 
+
 # -------------------------
-# Admin panel – photos + profile-to-profile matches
+# Admin panel – profile matches table + swipe photos
 # -------------------------
 def admin_panel():
-    tab1, tab2 = st.tabs(["Swipe Photo Admin", "Profile Match Explorer"])
+    tab1, tab2 = st.tabs(["Profile Matches Table", "Swipe Photo Admin"])
 
-    # ---- Tab 1: swipe photo management ----
+    # ---- Tab 1: summary table of mutual matches between fictional profiles ----
     with tab1:
+        st.subheader("Mutual Matches Between Fictional Profiles")
+
+        rows = []
+        for base_profile in PROFILES:
+            prefs = PROFILE_PREFERENCES.get(base_profile["name"], {})
+
+            # build pseudo-user from profile + their prefs
+            user = {
+                "age": base_profile["age"],
+                "city": base_profile["location"],
+                "gender": base_profile["gender"],
+                "min_age": prefs.get("min_age", 25),
+                "max_age": prefs.get("max_age", 60),
+                "open_to_long_distance": True,
+                "wants_kids": base_profile["wants_kids"],
+                "kids_strict": True,
+                "timeline_kids": base_profile["timeline_kids"],
+                "relationship_goal": base_profile["relationship_goal"],
+                "adventure_level": base_profile["adventure_level"],
+                "stability_level": base_profile["stability_level"],
+                "ambition_level": base_profile["ambition_level"],
+                "emotional_availability": base_profile["emotional_availability"],
+                "communication_style": base_profile["communication_style"],
+                "preferred_styles": prefs.get("preferred_styles", []),
+                "self_style_tags": base_profile.get("style_tags", []),
+                "interested_in_genders": prefs.get("preferred_genders", []),
+            }
+
+            match_names = []
+            match_scores = []
+
+            for other in PROFILES:
+                if other["name"] == base_profile["name"]:
+                    continue
+
+                res = compute_match(user, other)
+                if not res or not res["is_good_mutual"]:
+                    continue
+
+                match_names.append(other["name"])
+                match_scores.append(str(res["final_score"]))
+
+            rows.append(
+                {
+                    "Person": base_profile["name"],
+                    "Matches": ", ".join(match_names) if match_names else "",
+                    "Scores": ", ".join(match_scores) if match_scores else "",
+                }
+            )
+
+        st.table(rows)
+
+    # ---- Tab 2: swipe photo admin ----
+    with tab2:
         st.subheader("Swipe Photo Management")
-        st.markdown("Upload generic photos for the like / not-for-me exercise (not the profile headshots).")
+        st.markdown("Upload generic photos for the like / not-for-me exercise (not the headshots above).")
 
         photos = load_photos()
         uploaded_files = st.file_uploader(
@@ -505,86 +603,13 @@ def admin_panel():
             save_photos(photos)
             st.success("Photos saved to backend.")
 
-        st.markdown("#### Existing photos")
+        st.markdown("#### Existing swipe photos")
         if photos:
             for p in photos:
                 st.image(p["path"], width=150, caption=f"ID {p['id']}: {p['filename']}")
         else:
             st.info("No swipe photos uploaded yet.")
 
-    # ---- Tab 2: profile-to-profile matches ----
-    with tab2:
-        st.subheader("Profile Match Explorer")
-        st.markdown(
-            "Pick one fictional person and see how they match with the others, using their own "
-            "relationship data plus their imagined attraction preferences."
-        )
-
-        profile_names = [p["name"] for p in PROFILES]
-        base_name = st.selectbox("View matches for:", profile_names)
-
-        base_profile = next(p for p in PROFILES if p["name"] == base_name)
-        prefs = PROFILE_PREFERENCES.get(base_name, {})
-
-        # Build a pseudo-user from this profile + their prefs
-        user = {
-            "age": base_profile["age"],
-            "city": base_profile["location"],
-            "gender": base_profile["gender"],
-            "min_age": prefs.get("min_age", 25),
-            "max_age": prefs.get("max_age", 60),
-            "open_to_long_distance": True,
-            "wants_kids": base_profile["wants_kids"],
-            "kids_strict": True,
-            "timeline_kids": base_profile["timeline_kids"],
-            "relationship_goal": base_profile["relationship_goal"],
-            "adventure_level": base_profile["adventure_level"],
-            "stability_level": base_profile["stability_level"],
-            "ambition_level": base_profile["ambition_level"],
-            "emotional_availability": base_profile["emotional_availability"],
-            "communication_style": base_profile["communication_style"],
-            "preferred_styles": prefs.get("preferred_styles", []),
-            "self_style_tags": base_profile.get("style_tags", []),
-            "interested_in_genders": prefs.get("preferred_genders", []),
-        }
-
-        if st.button("Compute matches for this profile"):
-            rows = []
-            for other in PROFILES:
-                if other["name"] == base_name:
-                    continue
-
-                if not passes_dealbreakers(user, other):
-                    continue
-
-                comp_score, breakdown = score_profile(user, other)
-                base_likes_other = user_attraction_to_profile(user, other)
-                other_likes_base = profile_attraction_to_user(other, user)
-
-                final_score = (
-                    0.5 * (comp_score / 100.0)
-                    + 0.25 * base_likes_other
-                    + 0.25 * other_likes_base
-                ) * 100.0
-
-                rows.append(
-                    {
-                        "name": other["name"],
-                        "age": other["age"],
-                        "gender": other["gender"],
-                        "location": other["location"],
-                        "compatibility": round(comp_score, 1),
-                        f"{base_name}→them_attraction": int(base_likes_other * 100),
-                        f"them→{base_name}_attraction": int(other_likes_base * 100),
-                        "final_score": round(final_score, 1),
-                    }
-                )
-
-            if not rows:
-                st.warning("No matches found within dealbreakers for this profile.")
-            else:
-                rows = sorted(rows, key=lambda r: r["final_score"], reverse=True)
-                st.dataframe(rows)
 
 # -------------------------
 # User app
@@ -599,9 +624,10 @@ def user_app():
 
     st.markdown(
         "This prototype:\n"
-        "- Applies **dealbreakers** (orientation, geography, age, kids).\n"
+        "- Applies **hard dealbreakers** (orientation, geography, age, kids).\n"
         "- Scores **compatibility** on goals and lifestyle.\n"
-        "- Models **your attraction to them** and **their attraction to you** from simple rules.\n"
+        "- Models **your attraction to them** and **their attraction to you**.\n"
+        "- Only shows **mutual matches** that cross minimum thresholds.\n"
         "- Optionally collects extra attraction data via a swipe-style photo exercise."
     )
 
@@ -700,46 +726,27 @@ def user_app():
         "interested_in_genders": interested_in_genders,
     }
 
-    if st.button("Find my top matches"):
-        viable = [p for p in PROFILES if passes_dealbreakers(user, p)]
+    if st.button("Find my mutual matches"):
+        st.header("2. Your mutual matches (fictional)")
 
-        st.header("2. Your matches (fictional)")
+        matches = []
+        for p in PROFILES:
+            res = compute_match(user, p)
+            if not res or not res["is_good_mutual"]:
+                continue
+            matches.append((p, res))
 
-        if not viable:
-            st.warning("No profiles passed your hard dealbreakers. Try relaxing one or two.")
+        if not matches:
+            st.warning("No mutual matches above the thresholds. You can relax dealbreakers or we can adjust thresholds.")
         else:
-            results = []
-            for p in viable:
-                comp_score, breakdown = score_profile(user, p)
-                you_like_them = user_attraction_to_profile(user, p)   # 0–1
-                they_like_you = profile_attraction_to_user(p, user)   # 0–1
+            matches.sort(key=lambda pr: pr[1]["final_score"], reverse=True)
 
-                final_score = (
-                    0.5 * (comp_score / 100.0)
-                    + 0.25 * you_like_them
-                    + 0.25 * they_like_you
-                ) * 100.0
-
-                results.append(
-                    {
-                        "profile": p,
-                        "comp_score": comp_score,
-                        "you_like_them": you_like_them,
-                        "they_like_you": they_like_you,
-                        "final_score": round(final_score, 1),
-                        "breakdown": breakdown,
-                    }
-                )
-
-            results.sort(key=lambda x: x["final_score"], reverse=True)
-
-            for i, item in enumerate(results[:3], start=1):
-                p = item["profile"]
-                comp_score = item["comp_score"]
-                you_like = int(item["you_like_them"] * 100)
-                they_like = int(item["they_like_you"] * 100)
-                final_score = item["final_score"]
-                breakdown = item["breakdown"]
+            for i, (p, res) in enumerate(matches, start=1):
+                comp_score = res["comp_score"]
+                you_like = int(res["you_like_them"] * 100)
+                they_like = int(res["they_like_you"] * 100)
+                final_score = res["final_score"]
+                breakdown = res["breakdown"]
 
                 headline, themes = coaching_blurb(user, p, comp_score, breakdown)
 
@@ -760,13 +767,12 @@ def user_app():
                     for t in themes:
                         st.markdown(f"- {t}")
 
-        st.header("3. Meta: what this prototype is doing")
+        st.header("3. How to read the score")
         st.markdown(
-            "- Hard filters (orientation, geography, age, kids) first.\n"
-            "- Compatibility based on kids, goals, lifestyle, communication.\n"
-            "- Your attraction estimated from **your stated tastes vs their style tags**.\n"
-            "- Their attraction estimated from **their imagined swipe prefs** vs your **gender, age, and style**.\n"
-            "- Final score blends all three."
+            "- **65–75**: Promising, worth real-world exploration.\n"
+            "- **75–85**: Strong match; good overlap + mutual attraction.\n"
+            "- **85+**: Rare, high-alignment scenario.\n\n"
+            "Anything below ~65 we treat as more of a 'maybe interesting, but not a clear recommendation.'"
         )
 
     # -------------------------
@@ -776,7 +782,7 @@ def user_app():
 
     st.markdown(
         "This collects simple 'Like' / 'Not for me' signals on generic photos to someday "
-        "train a more nuanced attraction model. It’s not used directly in the scores above yet."
+        "train a more nuanced attraction model. It isn’t yet wired into the scores above."
     )
 
     photos = load_photos()
@@ -800,6 +806,7 @@ def user_app():
         log_photo_rating(st.session_state["session_id"], current["id"], "not_for_me")
         st.session_state["photo_index"] += 1
         st.experimental_rerun()
+
 
 # -------------------------
 # Entry point
