@@ -3,6 +3,7 @@ import os
 import json
 import csv
 from uuid import uuid4
+import pandas as pd
 
 # -------------------------
 # Basic config
@@ -1604,15 +1605,21 @@ def coaching_blurb(user, profile, comp_score, breakdown):
 def admin_panel():
     tab1, tab2 = st.tabs(["Profile Matches Table", "Swipe Photo Admin"])
 
-    # ---- Tab 1: summary table of mutual matches between fictional profiles ----
+    # ---- Tab 1: summary table of mutually top-3 matches between fictional profiles ----
     with tab1:
         st.subheader("Mutual Matches Between Fictional Profiles")
 
-        rows = []
-        for base_profile in PROFILES:
-            prefs = PROFILE_PREFERENCES.get(base_profile["name"], {})
+        names = [p["name"] for p in PROFILES]
+        profile_by_name = {p["name"]: p for p in PROFILES}
 
-            # build pseudo-user from profile + their prefs
+        # First: compute all "good mutual" matches + scores for each person
+        raw_scores = {name: {} for name in names}
+
+        for base_profile in PROFILES:
+            base_name = base_profile["name"]
+            prefs = PROFILE_PREFERENCES.get(base_name, {})
+
+            # pseudo-user built from profile + their prefs
             user = {
                 "age": base_profile["age"],
                 "city": base_profile["location"],
@@ -1634,31 +1641,63 @@ def admin_panel():
                 "interested_in_genders": prefs.get("preferred_genders", []),
             }
 
-            match_names = []
-            match_scores = []
-
             for other in PROFILES:
-                if other["name"] == base_profile["name"]:
+                other_name = other["name"]
+                if other_name == base_name:
                     continue
 
                 res = compute_match(user, other)
                 if not res or not res["is_good_mutual"]:
                     continue
 
-                match_names.append(other["name"])
-                match_scores.append(str(res["final_score"]))
+                raw_scores[base_name][other_name] = res["final_score"]
+
+        # Second: keep only each person's top 3 matches (by score)
+        top3 = {}
+        for name, partners in raw_scores.items():
+            sorted_partners = sorted(
+                partners.items(), key=lambda kv: kv[1], reverse=True
+            )
+            top3[name] = sorted_partners[:3]
+
+        # Third: enforce that a match only counts if each person is in the other's top 3
+        mutual_top_pairs = set()
+        for a, partners in top3.items():
+            partners_dict = dict(partners)
+            for b in partners_dict.keys():
+                other_top = dict(top3.get(b, []))
+                if a in other_top:
+                    mutual_top_pairs.add((a, b))
+
+        # Build rows for the admin table
+        rows = []
+        for name in names:
+            base_profile = profile_by_name[name]
+            # short reminder of who this is (first sentence / ~80 chars)
+            short_desc = base_profile["description"].split(".")[0][:80]
+
+            matches_for_person = []
+            scores_for_person = []
+            partners_dict = dict(top3[name])
+
+            for match_name, score in partners_dict.items():
+                if (name, match_name) in mutual_top_pairs:
+                    matches_for_person.append(match_name)
+                    scores_for_person.append(f"{score:.1f}")
 
             rows.append(
                 {
-                    "Person": base_profile["name"],
-                    "Matches": ", ".join(match_names) if match_names else "",
-                    "Scores": ", ".join(match_scores) if match_scores else "",
+                    "Person": name,
+                    "Summary": short_desc,
+                    "Matches": ", ".join(matches_for_person),
+                    "Scores": ", ".join(scores_for_person),
                 }
             )
 
-        st.table(rows)
+        df = pd.DataFrame(rows)
+        st.dataframe(df, hide_index=True, use_container_width=True)
 
-    # ---- Tab 2: swipe photo admin ----
+    # ---- Tab 2: swipe photo admin (unchanged) ----
     with tab2:
         st.subheader("Swipe Photo Management")
         st.markdown("Upload generic photos for the like / not-for-me exercise (not the headshots above).")
@@ -1689,7 +1728,6 @@ def admin_panel():
                 st.image(p["path"], width=150, caption=f"ID {p['id']}: {p['filename']}")
         else:
             st.info("No swipe photos uploaded yet.")
-
 
 # -------------------------
 # User app
