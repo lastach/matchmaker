@@ -298,7 +298,7 @@ PROFILE_PREFERENCES = {
         "min_age": 34,
         "max_age": 45,
     },
-]
+}
 
 
 # -------------------------
