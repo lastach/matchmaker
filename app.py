@@ -1061,7 +1061,7 @@ PROFILES = [
      'stability_level': 5,
      'style_tags': ['Soft / cozy / nurturing', 'Polished / professional'],
      'timeline_kids': 'Someday (3-7 years)',
-     'wants_kids': 'Yes'}
+     'wants_kids': 'Yes'},
     {'name': "Laurie",
     'age': 41,
     'gender': "Woman",
@@ -1403,14 +1403,10 @@ PROFILE_PREFERENCES = {
     },
     "Laurie": {
     "preferred_genders": ["man"],
-    "preferred_styles": [
-        "active_outdoorsy",
-        "refined_casual",
-        "clean_cut",
-        "adventurous"
+    "preferred_styles": ["Polished / professional", "Outdoorsy / athletic"],
     ],
-    "min_age": 35,
-    "max_age": 52,
+    "min_age": 33,
+    "max_age": 49,
 }
 }
 
