@@ -1404,7 +1404,6 @@ PROFILE_PREFERENCES = {
     "Laurie": {
     "preferred_genders": ["man"],
     "preferred_styles": ["Polished / professional", "Outdoorsy / athletic"],
-    ],
     "min_age": 33,
     "max_age": 49,
 }
